@@ -4,8 +4,10 @@ import random
 import numpy as np
 import matplotlib.pyplot as plt
 
-dimacs_file = 'data/sudoku_new.txt'
+DIMACS = []
 
+for i in range(35):
+    DIMACS.append(['data/sudoku-rules.txt', 'data/damnhard_converted_{}.txt'.format(i)])
 
 
 # -- CONSTANTS
@@ -40,7 +42,93 @@ UNIT_CLAUSE = 3
 #    def ready:
 #    def generate_node:
 
-class RandomChoiceTracker:
+class LeastConstrainingComponent:
+    nodes = 0
+    lcscore = {}
+
+    def link_cnf(self, cnf):
+        for var in list(cnf.get_unassigned()):
+            self.lcscore[var] = 0
+
+        self.cnf_instance = cnf
+
+    def init_with_clause(self, clause, clause_id):
+        for literal in clause:
+            var = abs(literal)
+            if literal > 0:
+                self.lcscore[var] += 2**-len(clause)
+            else:
+                self.lcscore[var] -= 2**-len(clause)
+
+    def rm_clause(self, operand, clause_id):
+        for literal in operand:
+            var = abs(literal)
+            if literal > 0:
+                self.lcscore[var] -= 2**-len(operand)
+            else:
+                self.lcscore[var] += 2**-len(operand)
+
+    def rm_literal(self, operand, clause_id):
+        clause = self.cnf_instance.get_clause(clause_id) 
+        for literal in clause:
+            var = abs(literal)
+            if literal == operand:
+                if literal > 0:
+                    self.lcscore[var] -= 2**-len(clause)
+                else:
+                    self.lcscore[var] += 2**-len(clause)
+            else:
+                if literal > 0:
+                    self.lcscore[var] -= 2**-len(clause)
+                    self.lcscore[var] += 2**-(len(clause)-1)
+                else:
+                    self.lcscore[var] += 2**-len(clause)
+                    self.lcscore[var] -= 2**-(len(clause)-1)
+
+    def undo_rm_literal(self, operand, clause_id):
+        clause = self.cnf_instance.get_clause(clause_id) 
+        for literal in clause:
+            var = abs(literal)
+            if literal == operand:
+                if literal > 0:
+                    self.lcscore[var] += -2**len(clause+1)
+                else:
+                    self.lcscore[var] -= -2**len(clause+1)
+            else:
+                if literal > 0:
+                    self.lcscore[var] -= -2**len(clause)
+                    self.lcscore[var] += -2**(len(clause)+1)
+                else:
+                    self.lcscore[var] += -2**len(clause)
+                    self.lcscore[var] -= -2**(len(clause)+1)
+
+    def undo_rm_clause(self, operand, clause_id):
+        clause = operand
+        for literal in clause:
+            var = abs(literal)
+            if literal > 0:
+                self.lcscore[var] += 2**-len(clause)
+            else:
+                self.lcscore[var] -= 2**-len(clause)
+
+    def ready(self):
+        return True
+
+    def generate_node(self, current_node):
+        keys = self.cnf_instance.get_unassigned()
+        
+        score_list = [(k, v) for k, v in self.lcscore.items() if k in keys]
+        score_list.sort( key = lambda tup : abs(tup[1]) )
+        if score_list[0][1] > 0:
+            literal = score_list[0][0]
+        else:
+            literal = -score_list[0][0]
+
+        self.nodes += 1
+        return HardChoiceNode(literal, current_node)
+
+
+class RandomChoiceComponent:
     nodes = 0
 
     def link_cnf(self, cnf_instance):
@@ -61,9 +149,6 @@ class RandomChoiceTracker:
     def undo_rm_clause(self, operand, clause_id):
         pass
 
-    def get_random_literal(self):
-        pass
-
     def ready(self):
         return True
 
@@ -74,7 +159,7 @@ class RandomChoiceTracker:
         return HardChoiceNode(literal, current_node)
 
 
-class UnitClauseTracker:
+class UnitClauseComponent:
     unit_clauses = set()
     nodes = 0
 
@@ -120,7 +205,7 @@ class UnitClauseTracker:
         self.nodes += 1
         return UnitClauseNode(literal, current_node)
 
-class PureLiteralTracker:
+class PureLiteralComponent:
     nodes = 0
     literal_counts = {}
     pure_literals = set()
@@ -279,31 +364,31 @@ class ClausalNormalForm:
     unit_clauses = set()
     unassigned_vars = set()
 
-    def __init__(self, input_file, search_components):
+    def __init__(self, dimacs_files, search_components):
         self.search_components = search_components
-
-        h_sat_file = open(input_file, 'r')
 
 	# First pass: go over DIMACS and create list of clauses
 	# https://stackoverflow.com/questions/28890268/parse-dimacs-cnf-file-python
         temp_clause_list = [[]]
 
-        for line in h_sat_file:
-            tokens = line.split()
-            if len(tokens) != 0 and tokens[0] not in ("p", "c"):
-                for tok in tokens:
-                    lit = int(tok)
-                    if lit == 0:
-                        temp_clause_list.append(list())
-                        break
-                    else:
-                        temp_clause_list[-1].append(lit)
+        for dimacs_file in dimacs_files:
+            h_sat_file = open(dimacs_file, 'r')
 
-                    var = abs(lit)
-                    if var not in self.unassigned_vars:
-                        self.unassigned_vars.add(var)
+            for line in h_sat_file:
+                tokens = line.split()
+                if len(tokens) != 0 and tokens[0] not in ("p", "c"):
+                    for tok in tokens:
+                        lit = int(tok)
+                        if lit == 0:
+                            temp_clause_list.append(list())
+                            break
+                        else:
+                            temp_clause_list[-1].append(lit)
 
-        temp_clause_list.pop()
+                        var = abs(lit)
+                        if var not in self.unassigned_vars:
+                            self.unassigned_vars.add(var)
+            temp_clause_list.pop()
 
         for search_comp in self.search_components:
             search_comp.link_cnf(self)
@@ -481,8 +566,8 @@ class ClausalNormalForm:
 
 # -- DPLL
 
-NO_TESTS = 4
-PRINTS = True
+NO_TESTS = 10
+PRINTS = False
 
 a_backtracks = np.zeros((NO_TESTS, 1))
 a_explored_nodes = np.zeros((NO_TESTS, 1))
@@ -490,91 +575,93 @@ a_hard_choice_nodes = np.zeros((NO_TESTS, 1))
 a_unit_clause_nodes = np.zeros((NO_TESTS, 1))
 a_pure_literal_nodes = np.zeros((NO_TESTS, 1))
 
-for test in range(NO_TESTS):
-    print("Running test, ", test, end='\r')
+for dimacs_file_set in DIMACS:
+    for test in range(NO_TESTS):
+        print("Running test, ", test, end='\r')
 
-    search_components = [UnitClauseTracker(), PureLiteralTracker(), RandomChoiceTracker()]
-    my_cnf = ClausalNormalForm(dimacs_file, search_components)
+        search_components = [UnitClauseComponent(), PureLiteralComponent(), RandomChoiceComponent()]
+        #search_components = [UnitClauseComponent(), PureLiteralComponent(), LeastConstrainingComponent()]
+        my_cnf = ClausalNormalForm(dimacs_file_set, search_components)
 
-    backtracks = 0
-    explored_nodes = 0
+        backtracks = 0
+        explored_nodes = 0
 
-    # Gen parent node
+        # Gen parent node
 
-    for search_cmp in my_cnf.search_components:
-        if search_cmp.ready():
-            current_node = search_cmp.generate_node(None)
-            break
-
-    while True:
-        # Startup
-        if current_node.is_explored():
-            if DEBUG:
-                print("Backtracking")
-            if current_node.parent != None:
-                backtracks += 1
-                my_cnf.backtrack()
-                previous_node = current_node
-                current_node = previous_node.parent
-                del previous_node
-            else:
-                print("UNSAT!")
-                sys.exit()
-        else:
-            result = my_cnf.assign(current_node.explore())
-
-            if result == SAT:
+        for search_cmp in my_cnf.search_components:
+            if search_cmp.ready():
+                current_node = search_cmp.generate_node(None)
                 break
-            # If assignment yielded UNSAT - backtrack
-            elif result == UNSAT:
-                my_cnf.backtrack()
-            # Check and create unit clause nodes
+
+        while True:
+            # Startup
+            if current_node.is_explored():
+                if DEBUG:
+                    print("Backtracking")
+                if current_node.parent != None:
+                    backtracks += 1
+                    my_cnf.backtrack()
+                    previous_node = current_node
+                    current_node = previous_node.parent
+                    del previous_node
+                else:
+                    print("UNSAT!")
+                    sys.exit()
             else:
-                for search_cmp in my_cnf.search_components:
-                    if search_cmp.ready():
-                        current_node = search_cmp.generate_node(current_node)
-                        break
+                result = my_cnf.assign(current_node.explore())
 
-            explored_nodes += 1
+                if result == SAT:
+                    break
+                # If assignment yielded UNSAT - backtrack
+                elif result == UNSAT:
+                    my_cnf.backtrack()
+                # Check and create unit clause nodes
+                else:
+                    for search_cmp in my_cnf.search_components:
+                        if search_cmp.ready():
+                            current_node = search_cmp.generate_node(current_node)
+                            break
 
-    # Will get here only if SAT
+                explored_nodes += 1
 
-    assignment = []
-    counter = 0
+        # Will get here only if SAT
 
-    while current_node != None:
-        assignment.append(current_node.var)
-        if current_node.var > 0:
-            counter += 1
-        current_node = current_node.parent
+        assignment = []
+        counter = 0
 
-    a_backtracks[test] = backtracks
-    a_explored_nodes[test] = explored_nodes
-    a_hard_choice_nodes[test] = my_cnf.search_components[0].nodes
-    a_unit_clause_nodes[test] = my_cnf.search_components[1].nodes
-    a_pure_literal_nodes[test] = my_cnf.search_components[2].nodes
+        while current_node != None:
+            assignment.append(current_node.var)
+            if current_node.var > 0:
+                counter += 1
+            current_node = current_node.parent
 
-    if PRINTS:
+        a_backtracks[test] = backtracks
+        a_explored_nodes[test] = explored_nodes
+        a_hard_choice_nodes[test] = my_cnf.search_components[0].nodes
+        a_unit_clause_nodes[test] = my_cnf.search_components[1].nodes
+        a_pure_literal_nodes[test] = my_cnf.search_components[2].nodes
 
-        print("SAT. Assignment is:")
-        print(assignment)
-        # Poor man's debugging, should be 729 assigned and 81 true for sudoku
-        print("Number of assigned variables: ", len(assignment))
-        print("Number of true variables: ", counter)
-        print("Number of backtracks: ", backtracks)
-        print("Number of explored nodes: ", explored_nodes)
+        if PRINTS:
+
+            print("SAT. Assignment is:")
+            print(assignment)
+            # Poor man's debugging, should be 729 assigned and 81 true for sudoku
+            print("Number of assigned variables: ", len(assignment))
+            print("Number of true variables: ", counter)
+            print("Number of backtracks: ", backtracks)
+            print("Number of explored nodes: ", explored_nodes)
         print("Number of unit clause nodes: ", my_cnf.search_components[0].nodes)
         print("Number of pure literal nodes: ", my_cnf.search_components[1].nodes)
         print("Number of hard choice nodes: ", my_cnf.search_components[2].nodes)
 
-   # h_out_file = open('./output.out', 'w')
-   # for var in assignment:
-   #     h_out_file.write('{} {}\n'.format(var, '0'))
-   # h_out_file.close()
+       # h_out_file = open('./output.out', 'w')
+       # for var in assignment:
+       #     h_out_file.write('{} {}\n'.format(var, '0'))
+       # h_out_file.close()
 
-print()
-print("STD: ", np.std(a_backtracks))
-print("MEAN: ", np.mean(a_backtracks))
+    print()
+    print("STD: ", np.std(a_backtracks))
+    print("MEAN: ", np.mean(a_backtracks))
 
 
 
