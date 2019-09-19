@@ -579,8 +579,9 @@ for dimacs_file_set in DIMACS:
     for test in range(NO_TESTS):
         print("Running test, ", test, end='\r')
 
-        search_components = [UnitClauseComponent(), PureLiteralComponent(), RandomChoiceComponent()]
-        #search_components = [UnitClauseComponent(), PureLiteralComponent(), LeastConstrainingComponent()]
+        #search_components = [UnitClauseComponent(), PureLiteralComponent(), RandomChoiceComponent()]
+        search_components = [UnitClauseComponent(), PureLiteralComponent(), LeastConstrainingComponent()]
+        search_components = [UnitClauseComponent(), LeastConstrainingComponent()]
         my_cnf = ClausalNormalForm(dimacs_file_set, search_components)
 
         backtracks = 0
@@ -638,8 +639,8 @@ for dimacs_file_set in DIMACS:
         a_backtracks[test] = backtracks
         a_explored_nodes[test] = explored_nodes
         a_hard_choice_nodes[test] = my_cnf.search_components[0].nodes
-        a_unit_clause_nodes[test] = my_cnf.search_components[1].nodes
-        a_pure_literal_nodes[test] = my_cnf.search_components[2].nodes
+        #a_unit_clause_nodes[test] = my_cnf.search_components[1].nodes
+        a_pure_literal_nodes[test] = my_cnf.search_components[1].nodes
 
         if PRINTS:
 
@@ -650,9 +651,9 @@ for dimacs_file_set in DIMACS:
             print("Number of true variables: ", counter)
             print("Number of backtracks: ", backtracks)
             print("Number of explored nodes: ", explored_nodes)
-        print("Number of unit clause nodes: ", my_cnf.search_components[0].nodes)
-        print("Number of pure literal nodes: ", my_cnf.search_components[1].nodes)
-        print("Number of hard choice nodes: ", my_cnf.search_components[2].nodes)
+            print("Number of unit clause nodes: ", my_cnf.search_components[0].nodes)
+            print("Number of pure literal nodes: ", my_cnf.search_components[1].nodes)
+            print("Number of hard choice nodes: ", my_cnf.search_components[2].nodes)
 
        # h_out_file = open('./output.out', 'w')
        # for var in assignment:
