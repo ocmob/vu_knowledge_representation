@@ -1,364 +1,281 @@
 import sys
-import re
-import random
+import numpy as np
+import matplotlib.pyplot as plt
+import pandas as pd
 
-dimacs_file = 'data/sudoku_new.txt'
+# Internal
+import search_components
+import cnf
 
+def dp(dimacs_file_set, search_cmp):
 
+    for scmp in search_cmp:
+        scmp.reset()
 
-# -- CONSTANTS
+    my_cnf = cnf.ClausalNormalForm(dimacs_file_set, search_cmp)
 
-# Enable global debug. Warning: prints a ton of info to the screen
-DEBUG = 0
+    backtracks = 0
+    success = False
 
-# ClausalNormalForm assign method constants
-UNSAT = 0
-SAT = 1
-
-# ClausalNormalForm backtrack action type constants
-RM_CLAUSE = 0
-RM_LITERAL = 1
-ASSIGN = 2
-
-# BinaryTreeNode node type constants
-HARD_CHOICE = 1
-PURE_LITERAL = 2
-UNIT_CLAUSE = 3
-
-
-
-# -- CLASS DEFINITIONS
-
-# Binary tree node for the Davis-Putnam search
-class BinaryTreeNode:
-    def __init__(self, var, parent, node_type=HARD_CHOICE):
-        self.var = var
-        self.parent = parent
-        self.type = node_type
-        self.true_explored = False
-        self.false_explored = False
-
-
-# Data structure for keeping and organizing the current status of the problem
-class ClausalNormalForm:
-    current_cnf = {}
-    op_stack = []
-    unit_clauses = set()
-    pure_literals = set()
-    impure_literals = set()
-    unassigned_vars = set()
-
-    def __init__(self, input_file):
-        h_sat_file = open(input_file, 'r')
-
-        # Go over the DIMACS file
-        for clause_id, line in enumerate(h_sat_file):
-
-            # TODO : remove comments from DIMACS
-            # TODO : crosscheck no of vars from DIMACS with no of vars read from file
-
-            clause = line.split()
-
-            # Record all the variables
-            for var in clause[:-1]:
-                var = re.sub('-', '', var)
-                if var not in self.unassigned_vars:
-                    self.unassigned_vars.add(int(var))
-
-            # Keep clauses as sets for easy add/remove and search
-            clause = set([int(x) for x in clause][:-1])
-
-            # Check and record unit clauses
-            if len(clause) == 1:
-                self.unit_clauses.add(clause_id)
-
-            # Check for tautologies
-            for literal in clause:
-                if -literal in clause:
-                    if DEBUG:
-                        print("Removing clause:", clause)
-                    break
-
-            # If not a tautology: store the clause
-            else:
-                self.current_cnf[clause_id] = clause
-
-        # TODO : implement self.chk_pure_literals() efficiently
-
-    # TODO : This is a poor man's version of pure literal checking
-
-    def chk_pure_literals(self):
-        self.pure_literals = set()
-        self.impure_literals = set()
-    
-        for clause in self.current_cnf.values():
-            for literal in clause:
-                if abs(literal) not in self.impure_literals:
-                    if -literal in self.pure_literals:
-                        self.impure_literals.add(abs(literal))
-                    elif literal not in self.pure_literals:
-                        self.pure_literals.add(literal)
-
-
-    def get_unassigned(self):
-        return self.unassigned_vars
-
-    # TODO : Unit clause handling could be better, not having to call sth with clause_id
-    def get_unit_clauses(self):
-        if DEBUG:
-            print("Returning unit clause IDs:")
-            print(self.unit_clauses)
-        return self.unit_clauses
-
-    def get_unit_clause_literal(self, clause_id):
-        literal = self.current_cnf[clause_id].pop()
-        if DEBUG:
-            print("Getting literal from a unit clause")
-            print("literal: ",literal)
-        self.current_cnf[clause_id].add(literal)
-        return literal
-
-    def backtrack(self, no_steps=1):
-
-        # TODO : Raise exception if asked for more steps of backtrack than possible
-
-        if DEBUG:
-            print("Backtrack, no of steps: {}".format(no_steps))
-
-        for i in range(no_steps):
-            # Read the last operation sequence from stack
-            ops_single_step = self.op_stack.pop()
-
-            # Revert the operation sequence
-            for op in ops_single_step:
-                action = op[0]
-                clause_id = op[1]
-                operand = op[2]
-
-                # Restore deleted clauses
-                if action == RM_CLAUSE:
-                    if DEBUG:
-                        print("undoing RM_CLAUSE:")
-                        print("clause_id: {}, operand: {}".format(clause_id, operand))
-
-                    self.current_cnf[clause_id] = operand
-
-                    # If was a unit clause restore it into the unit clause list
-                    if len(operand) == 1:
-                        if DEBUG:
-                            print("Was a unit clause")
-                        self.unit_clauses.add(clause_id)
-
-                # Restore deleted literals
-                elif action == RM_LITERAL:
-                    if DEBUG:
-                        print("undoing RM_LITERAL:")
-                        print("clause_id: {}, operand: {}".format(clause_id, operand))
-
-                    # If it a unit clause now it will stop being one when we restore the literal
-                    if len(self.current_cnf[clause_id]) == 1:
-                        self.unit_clauses.remove(clause_id)
-
-                    self.current_cnf[clause_id].add(operand)
-
-                # Restore variables to unassigned_vars 
-                elif action == ASSIGN:
-                    if DEBUG:
-                        print("undoing ASSIGN:")
-                        print("operand: {}".format(operand))
-
-                    self.unassigned_vars.add(operand)
-
-    def assign(self, assignment):
-
-        status = None
-
-        # TODO : Raise exception if trying to assign variable which is not on the unassigned list
-
-        # Remember all operations for backtracking
-        ops_single_step = []
-
-        var = abs(assignment)
-
-        # Remember that we took this var from unassigned list
-        ops_single_step.append( (ASSIGN, None, var) )
-        self.unassigned_vars.remove(var)
-
-        if DEBUG:
-            print("Assign step. Assignment: {}".format(assignment))
-
-        # Go through the clauses and perform assignment
-        for clause_id, clause in list(self.current_cnf.items()):
-            if DEBUG:
-                print("Clause id: {}, clause: {}".format(clause_id, clause))
-
-            if assignment in clause:
-                if DEBUG:
-                    print("Assignment found. Removing clause")
-
-                # Remember that we removed this clause
-                ops_single_step.append( (RM_CLAUSE, clause_id, clause) )
-
-                if len(self.current_cnf[clause_id]) == 1:
-                    self.unit_clauses.remove(clause_id)
-
-                del self.current_cnf[clause_id]
-
-            elif -assignment in clause:
-                if DEBUG:
-                    print("NOT Assignment found. Removing literal")
-
-                # Remember that we removed this literal
-                ops_single_step.append( (RM_LITERAL, clause_id, -assignment) )
-
-                self.current_cnf[clause_id].remove(-assignment)
-
-                # If empty set detected: UNSAT. Exit loop and report back
-                if not bool(self.current_cnf[clause_id]):
-                    status = UNSAT
-                    if DEBUG: 
-                        print("UNSAT FOUND")
-                    break
-
-                # If new unit clause appeared: record it
-                if len(self.current_cnf[clause_id]) == 1:
-                    self.unit_clauses.add(clause_id)
-
-        # If the cnf is empty: report SAT!
-        if not bool(self.current_cnf):
-            status = SAT
-        else:
-            # TODO : Perhaps can be done easier by merging dicts instead of doing this?
-            self.op_stack.append(ops_single_step)
-
-        return status
-
-
-    def print_op_stack(self):
-        print(self.op_stack)
-
-    def print_current_cnf(self):
-        print(self.current_cnf)
-
-    def print_vars(self):
-        print(self.unassigned_vars)
-
-    def print_debug(self):
-        print("-------------------------------------------")
-        print("OP STACK:")
-        self.print_op_stack()
-        print("CURRENT CNF:")
-        self.print_current_cnf()
-        print("VARS:")
-        self.print_vars()
-
-
-
-# -- HELPER FUNCTIONS
-
-def get_random_var():
-    variables = my_cnf.get_unassigned()
-    var = random.sample(variables, 1)[0]
-    return var
-
-
-
-# -- DPLL
-
-my_cnf = ClausalNormalForm(dimacs_file)
-
-if DEBUG:
-    print("Creating parent node")
-
-current_node = None
-
-if my_cnf.get_unit_clauses():
-    if DEBUG:
-        print("Creating unit clause node")
-    # TODO : How do we choose the unit clause to assign? Currently taking first one
-    clause_id = list(my_cnf.get_unit_clauses())[0]
-    literal = my_cnf.get_unit_clause_literal(clause_id)
-    current_node = BinaryTreeNode(literal, None, UNIT_CLAUSE)
-else:
-    current_node = BinaryTreeNode(get_random_var(), None)
-
-while True:
-
-    if DEBUG:
-        print("Current node is:")
-        print(current_node.var)
-        print(current_node.type)
-        print("Truth explored = ", current_node.true_explored)
-        print("False explored = ", current_node.false_explored)
-
-    # IF NODE HAS BEEN EXPLORED : BACKTRACK
-    if current_node.true_explored & current_node.false_explored:
-        if DEBUG:
-            print("Backtracking")
-        if current_node.parent != None:
-            my_cnf.backtrack()
-            previous_node = current_node
-            current_node = previous_node.parent
-            del previous_node
-        else:
-            print("UNSAT!")
-            sys.exit()
-    # IF NODE HASN'T BEEN EXPLORED : CONTINUE SEARCH
-    else:
-        if current_node.type == UNIT_CLAUSE:
-            if DEBUG:
-                print("Present node is unexplored unit clause node")
-            current_node.true_explored = True
-            current_node.false_explored = True
-        # TODO : Be more clever with choosing whether to assign true or false. Currently always first with true
-        elif current_node.type == HARD_CHOICE & (not current_node.true_explored):
-            if DEBUG:
-                print("Present node is truth-unexplored hard choice node")
-            current_node.true_explored = True
-            current_node.var = abs(current_node.var)
-        elif current_node.type == HARD_CHOICE & (not current_node.false_explored):
-            if DEBUG:
-                print("Present node is false-unexplored hard choice node")
-            current_node.false_explored = True
-            current_node.var = -abs(current_node.var)
-
-        result = my_cnf.assign(current_node.var)
-
-        if result == SAT:
+    for search_cmp in my_cnf.search_cmp:
+        if search_cmp.ready():
+            current_node = search_cmp.generate_node(None)
             break
-        # If assignment yielded UNSAT - backtrack
-        elif result == UNSAT:
-            my_cnf.backtrack()
-        # Check and create unit clause nodes
-        elif my_cnf.get_unit_clauses():
-            if DEBUG:
-                print("Creating unit clause node")
-            clause_id = list(my_cnf.get_unit_clauses())[0]
-            literal = my_cnf.get_unit_clause_literal(clause_id)
-            current_node = BinaryTreeNode(literal, current_node, UNIT_CLAUSE)
-        # If no unit clauses - check and create hard choice nodes
+
+    while True:
+        # Startup
+        if current_node.is_explored():
+            if current_node.parent != None:
+                backtracks += 1
+                my_cnf.backtrack()
+                previous_node = current_node
+                current_node = previous_node.parent
+                del previous_node
+            else:
+                break
         else:
-            current_node = BinaryTreeNode(get_random_var(), current_node)
-            if DEBUG:
-                print("Creating hard choice node")
-                print(current_node.var)
+            result = my_cnf.assign(current_node.explore())
 
-# Will get here only if SAT
+            if result == cnf.SAT:
+                success = True
+                break
+            # If assignment yielded UNSAT - backtrack
+            elif result == cnf.UNSAT:
+                my_cnf.backtrack()
+            # Check and create unit clause nodes
+            else:
+                for search_cmp in my_cnf.search_cmp:
+                    if search_cmp.ready():
+                        current_node = search_cmp.generate_node(current_node)
+                        break
 
-assignment = []
-counter = 0
+    if success:
+        assignment = []
+        counter = 0
 
-while current_node != None:
-    assignment.append(current_node.var)
-    if current_node.var > 0:
-        counter += 1
-    current_node = current_node.parent
+        while current_node != None:
+            assignment.append(current_node.var)
+            if current_node.var > 0:
+                counter += 1
+            current_node = current_node.parent
 
-print("SAT. Assignment is:")
-print(assignment)
-# Poor man's debugging, should be 729 assigned and 81 true for sudoku
-print("Number of assigned variables: ", len(assignment))
-print("Number of true variables: ", counter)
+    answer_dict = {
+            'SAT' : success,
+            'solution' : assignment,
+            'backtracks' : backtracks,
+            'cnf' : my_cnf
+    }
+
+    return answer_dict
+
+# -8 : 8 , step: 0.1
+
+dimacs = []
+for i in range(1,100):
+    dimacs.append( ('randsat_{}'.format(i), ['data/uf75-325/ai/hoos/Shortcuts/UF75.325.100/uf75-0{}.cnf'.format(i)] ))
+for i in range(100):
+    dimacs.append( ('1000sudokus_{}'.format(i), ['data/sudoku-rules.txt', 'data/1000sudokus/1000sudokus_{}.txt'.format(i)] ))
+for i in range(20):
+    dimacs.append( ('damnhard_{}'.format(i), ['data/sudoku-rules.txt', 'data/damnhard_converted_{}.txt'.format(i)] ))
+
+#hyp_sweep = np.arange(-8, 8, 0.1)
+hyp_sweep = np.arange(0, 5, 0.05)
+gen_comp = []
+
+for hyp_threshold in hyp_sweep:
+    tup = ( hyp_threshold,
+            [
+                (search_components.UnitClauseComponent(), 'uc_nodes'), 
+                (search_components.PureLiteralComponent(), 'pl_nodes'),
+                (search_components.MostConstrainingMeta(hyp_threshold), 'most_constraining_nodes'),
+                (search_components.JWTwoSided(), 'jwnodes'),
+            ]
+    )
+    gen_comp.append(tup)
+
+#for hyp_threshold in hyp_sweep:
+#    tup = ( 'rand',
+#                [
+#                    (search_components.UnitClauseComponent(), 'uc_nodes'), 
+#                    (search_components.PureLiteralComponent(), 'pl_nodes'),
+#                    (search_components.MostConstrainingRandMeta(), 'most_constraining_nodes'),
+#                    (search_components.JWTwoSided(), 'jwnodes'),
+#                ]
+#        )
+#    gen_comp.append(tup)
+#
+#tup = ( 'JW',
+#            [
+#                (search_components.UnitClauseComponent(), 'uc_nodes'), 
+#                (search_components.PureLiteralComponent(), 'pl_nodes'),
+#                (search_components.JWTwoSided(), 'jwnodes'),
+#            ]
+#    )
+#gen_comp.append(tup)
+#tup = ( 'most_constraning',
+#            [
+#                (search_components.UnitClauseComponent(), 'uc_nodes'), 
+#                (search_components.PureLiteralComponent(), 'pl_nodes'),
+#                (search_components.MostConstrainingComponent(), 'most_constraining_nodes'),
+#            ]
+#    )
+#gen_comp.append(tup)
+
+experiment_run = {
+    # ARRAY OF TUPLES:
+    # [0] = NAME OF SET
+    # [1] = ARRAY WITH PATHS OF DIMACS FILES 
+    'dimacs' : dimacs,
+
+    # NUMBER OF ITERATIONS PER EACH DIMACS SET
+    'iterations' : 1,
+
+    # ARRAY OF TUPLES:
+    # [0] = NAME OF THE SET
+    # [1] = ARRAY OF TUPLES:
+    #   [0] = SEARCH COMPONENT
+    #   [1] = RETURN METRIC NAME
+    'search_components' : gen_comp
+    #'search_components' : [
+    #    ( 'most_constraining_dp',
+    #        [
+    #            (search_components.UnitClauseComponent(), 'uc_nodes'), 
+    #            (search_components.PureLiteralComponent(), 'pl_nodes'),
+    #            (search_components.MostConstrainingMeta(), 'split_nodes'),
+    #        ]
+    #    ),
+    #    #( 'jw_two_sided',
+    #    #    [
+    #    #        (search_components.UnitClauseComponent(), 'uc_nodes'), 
+    #    #        (search_components.PureLiteralComponent(), 'pl_nodes'),
+    #    #        (search_components.JWTwoSided(), 'split_nodes'),
+    #    #    ]
+    #    #),
+    #    #( 'random',
+    #    #    [
+    #    #        (search_components.UnitClauseComponent(), 'uc_nodes'), 
+    #    #        (search_components.PureLiteralComponent(), 'pl_nodes'),
+    #    #        (search_components.RandomChoiceComponent(), 'split_nodes'),
+    #    #    ]
+    #    #)
+    #]
+}
+#experiment_run = {
+#    # ARRAY OF TUPLES:
+#    # [0] = NAME OF SET
+#    # [1] = ARRAY WITH PATHS OF DIMACS FILES 
+#    'dimacs' : dimacs,
+#
+#    # NUMBER OF ITERATIONS PER EACH DIMACS SET
+#    'iterations' : 1,
+#
+#    # ARRAY OF TUPLES:
+#    # [0] = NAME OF THE SET
+#    # [1] = ARRAY OF TUPLES:
+#    #   [0] = SEARCH COMPONENT
+#    #   [1] = RETURN METRIC NAME
+#    'search_components' : [
+#        ( 'random_choice_dp',
+#            [
+#                (search_components.UnitClauseComponent(), 'uc_nodes'), 
+#                (search_components.PureLiteralComponent(), 'pl_nodes'),
+#                (search_components.JWTwoSided(), 'split_nodes'),
+#            ]
+#        ),
+#        ( 'most_constraining_dp',
+#            [
+#                (search_components.UnitClauseComponent(), 'uc_nodes'), 
+#                (search_components.PureLiteralComponent(), 'pl_nodes'),
+#                (search_components.MostConstrainingComponent(), 'split_nodes'),
+#            ]
+#        )
+#    ]
+#}
+
+def run_experiment(run_params):
+
+    data = pd.DataFrame()
+
+    total_cases = len(run_params['search_components'])*run_params['iterations']*len(run_params['dimacs'])
+    counter = 0
+    #lengths = []
+
+    print("Starting experiment.")
+    print("Total {} cases will be run.".format(total_cases))
+
+    for scmp_set in run_params['search_components']:
+        scmp_set_name = scmp_set[0]
+        scmp_cmp = [ tup[0] for tup in scmp_set[1] ]
+        scmp_cmp_names = [ tup[1] for tup in scmp_set[1] ]
+
+        for dimacs_set in run_params['dimacs']:
+            dimacs_set_name = dimacs_set[0]
+            dimacs_set_paths = dimacs_set[1]
+
+            for i in range(run_params['iterations']):
+                counter += 1
+                print("", end='\r')
+                print("Running: scmp_set_name: {}, dimacs_set_name: {}, iteration: {}. Case {} of {} total.".format(
+                    scmp_set_name, dimacs_set_name, i, counter, total_cases), end='\r')
+
+                results = dp(dimacs_set_paths, scmp_cmp)
+
+                #TODO : validate here valid
+                
+                res_dict = {
+                        'SAT' : [1 if results['SAT'] else 0],
+                        'valid' : [1],
+                        'dimacs_set' : [dimacs_set_name],
+                        'iteration' : [i],
+                        'cmp_set' : [scmp_set_name],
+                        'backtracks' : [results['backtracks']]
+                        }
+                
+                for k, name in enumerate(scmp_cmp_names):
+                    res_dict[name] = [results['cnf'].search_cmp[k].get_metrics()]
+
+                #lengths.append((results['cnf'].length_of_clause, dimacs_set_name+scmp_set_name))
+
+                df = pd.DataFrame(res_dict)
+                data = data.append(df, ignore_index = True)
+
+    print()
+    print('Done with {} cases. Results written to {}'.format(total_cases, 'DUMMY FILE'))
+
+    return data 
+
+
+
+data = run_experiment(experiment_run)
+print(data)
+data.to_csv('output.csv')
+
+#for length_set in lengths:
+#    plt.plot(length_set[0], label = length_set[1])
+
+
+
+# Inputs:
+#   -A list of dimacs file sets
+#       -A codename of each set
+#   -no of iterations per dimacs
+#   -component sets
+#       -codename per component set
+#       -and names of fields displaying metrics data from each components
+# Outputs:
+#   -SAT/UNSAT
+#   -Valid/invalid
+#   -Codename of DIMACS set
+#   -Iteration number
+#   -Codename of component set
+#   -fields displaying metrics data
+# Todo:
+#   -Run checker after every run
+
+
+
+
+
 
 # TODO IDEA: CHANGE HOW CLAUSES ARE STORED?
 #   Linked list type data structure - clause is an object, has parents (all variables participating)
