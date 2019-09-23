@@ -111,8 +111,289 @@ class JWTwoSided(SearchComponent):
         self.nodes += 1
         return search_tree.SplitNode(literal, current_node)
 
+class LeastConstrainingComponent(SearchComponent):
+    lcscore = {}
 
+    def reset(self):
+        self.lcscore = {}
+        self.nodes = 0
 
+    def link_cnf(self, cnf):
+        for var in list(cnf.get_unassigned()):
+            self.lcscore[var] = 0
+
+        self.cnf_instance = cnf
+
+    def init_with_clause(self, clause, clause_id):
+        for literal in clause:
+            var = abs(literal)
+            if literal > 0:
+                self.lcscore[var] += 2**(-len(clause))
+            else:
+                self.lcscore[var] -= 2**(-len(clause))
+
+    def rm_clause(self, operand, clause_id):
+        for literal in operand:
+            var = abs(literal)
+            if literal > 0:
+                self.lcscore[var] -= 2**(-len(operand))
+            else:
+                self.lcscore[var] += 2**(-len(operand))
+
+    def undo_rm_clause(self, operand, clause_id):
+        clause = operand
+        for literal in clause:
+            var = abs(literal)
+            if literal > 0:
+                self.lcscore[var] += 2**(-len(clause))
+            else:
+                self.lcscore[var] -= 2**(-len(clause))
+
+    def rm_literal(self, operand, clause_id):
+        clause = self.cnf_instance.get_clause(clause_id) 
+        for literal in clause:
+            var = abs(literal)
+            if literal == operand:
+                if literal > 0:
+                    self.lcscore[var] -= 2**(-len(clause))
+                else:
+                    self.lcscore[var] += 2**(-len(clause))
+            else:
+                if literal > 0:
+                    self.lcscore[var] -= 2**(-len(clause))
+                    self.lcscore[var] += 2**(-(len(clause)-1))
+                else:
+                    self.lcscore[var] += 2**(-len(clause))
+                    self.lcscore[var] -= 2**(-(len(clause)-1))
+
+    def undo_rm_literal(self, operand, clause_id):
+        clause = self.cnf_instance.get_clause(clause_id) 
+
+        var = abs(operand)
+        if operand > 0:
+            self.lcscore[var] += 2**(-(len(clause)+1))
+        else:
+            self.lcscore[var] -= 2**(-(len(clause)+1))
+
+        for literal in clause:
+            var = abs(literal)
+            if literal > 0:
+                self.lcscore[var] -= 2**(-len(clause))
+                self.lcscore[var] += 2**(-(len(clause)+1))
+            else:
+                self.lcscore[var] += 2**(-len(clause))
+                self.lcscore[var] -= 2**(-(len(clause)+1))
+
+    def ready(self):
+        return True
+
+    def generate_node(self, current_node):
+        keys = self.cnf_instance.get_unassigned()
+        
+        score_list = [(k, v) for k, v in self.lcscore.items() if k in keys]
+        score_list.sort( key = lambda tup : abs(tup[1]), reverse=True )
+        if score_list[0][1] > 0:
+            literal = score_list[0][0]
+        else:
+            literal = -score_list[0][0]
+
+        self.nodes += 1
+        return search_tree.SplitNode(literal, current_node)
+
+class MostConstrainingRandMeta(SearchComponent):
+    lcscore = {}
+
+    def reset(self):
+        self.lcscore = {}
+        self.nodes = 0
+
+    def link_cnf(self, cnf):
+        for var in list(cnf.get_unassigned()):
+            self.lcscore[var] = 0
+
+        self.cnf_instance = cnf
+
+    def init_with_clause(self, clause, clause_id):
+        for literal in clause:
+            var = abs(literal)
+            if literal > 0:
+                self.lcscore[var] += 2**(-len(clause))
+            else:
+                self.lcscore[var] -= 2**(-len(clause))
+
+    def rm_clause(self, operand, clause_id):
+        for literal in operand:
+            var = abs(literal)
+            if literal > 0:
+                self.lcscore[var] -= 2**(-len(operand))
+            else:
+                self.lcscore[var] += 2**(-len(operand))
+
+    def undo_rm_clause(self, operand, clause_id):
+        clause = operand
+        for literal in clause:
+            var = abs(literal)
+            if literal > 0:
+                self.lcscore[var] += 2**(-len(clause))
+            else:
+                self.lcscore[var] -= 2**(-len(clause))
+
+    def rm_literal(self, operand, clause_id):
+        clause = self.cnf_instance.get_clause(clause_id) 
+        for literal in clause:
+            var = abs(literal)
+            if literal == operand:
+                if literal > 0:
+                    self.lcscore[var] -= 2**(-len(clause))
+                else:
+                    self.lcscore[var] += 2**(-len(clause))
+            else:
+                if literal > 0:
+                    self.lcscore[var] -= 2**(-len(clause))
+                    self.lcscore[var] += 2**(-(len(clause)-1))
+                else:
+                    self.lcscore[var] += 2**(-len(clause))
+                    self.lcscore[var] -= 2**(-(len(clause)-1))
+
+    def undo_rm_literal(self, operand, clause_id):
+        clause = self.cnf_instance.get_clause(clause_id) 
+
+        #breakpoint()
+
+        var = abs(operand)
+        if operand > 0:
+            self.lcscore[var] += 2**(-(len(clause)+1))
+        else:
+            self.lcscore[var] -= 2**(-(len(clause)+1))
+
+        for literal in clause:
+            var = abs(literal)
+            if literal > 0:
+                self.lcscore[var] -= 2**(-len(clause))
+                self.lcscore[var] += 2**(-(len(clause)+1))
+            else:
+                self.lcscore[var] += 2**(-len(clause))
+                self.lcscore[var] -= 2**(-(len(clause)+1))
+
+    def ready(self):
+        if random.random() > 0.5:
+            return False
+        else: 
+            return True
+
+    def generate_node(self, current_node):
+        keys = self.cnf_instance.get_unassigned()
+        
+        score_list = [(k, v) for k, v in self.lcscore.items() if k in keys]
+        score_list.sort( key = lambda tup : abs(tup[1]), reverse=False )
+        if score_list[0][1] > 0:
+            literal = score_list[0][0]
+        else:
+            literal = -score_list[0][0]
+
+        self.nodes += 1
+        return search_tree.SplitNode(literal, current_node)
+
+class MostConstrainingMeta(SearchComponent):
+    lcscore = {}
+
+    def __init__(self, threshold):
+        self.threshold = threshold
+
+    def reset(self):
+        self.lcscore = {}
+        self.nodes = 0
+
+    def link_cnf(self, cnf):
+        for var in list(cnf.get_unassigned()):
+            self.lcscore[var] = 0
+
+        self.cnf_instance = cnf
+
+    def init_with_clause(self, clause, clause_id):
+        for literal in clause:
+            var = abs(literal)
+            if literal > 0:
+                self.lcscore[var] += 2**(-len(clause))
+            else:
+                self.lcscore[var] -= 2**(-len(clause))
+
+    def rm_clause(self, operand, clause_id):
+        for literal in operand:
+            var = abs(literal)
+            if literal > 0:
+                self.lcscore[var] -= 2**(-len(operand))
+            else:
+                self.lcscore[var] += 2**(-len(operand))
+
+    def undo_rm_clause(self, operand, clause_id):
+        clause = operand
+        for literal in clause:
+            var = abs(literal)
+            if literal > 0:
+                self.lcscore[var] += 2**(-len(clause))
+            else:
+                self.lcscore[var] -= 2**(-len(clause))
+
+    def rm_literal(self, operand, clause_id):
+        clause = self.cnf_instance.get_clause(clause_id) 
+        for literal in clause:
+            var = abs(literal)
+            if literal == operand:
+                if literal > 0:
+                    self.lcscore[var] -= 2**(-len(clause))
+                else:
+                    self.lcscore[var] += 2**(-len(clause))
+            else:
+                if literal > 0:
+                    self.lcscore[var] -= 2**(-len(clause))
+                    self.lcscore[var] += 2**(-(len(clause)-1))
+                else:
+                    self.lcscore[var] += 2**(-len(clause))
+                    self.lcscore[var] -= 2**(-(len(clause)-1))
+
+    def undo_rm_literal(self, operand, clause_id):
+        clause = self.cnf_instance.get_clause(clause_id) 
+
+        #breakpoint()
+
+        var = abs(operand)
+        if operand > 0:
+            self.lcscore[var] += 2**(-(len(clause)+1))
+        else:
+            self.lcscore[var] -= 2**(-(len(clause)+1))
+
+        for literal in clause:
+            var = abs(literal)
+            if literal > 0:
+                self.lcscore[var] -= 2**(-len(clause))
+                self.lcscore[var] += 2**(-(len(clause)+1))
+            else:
+                self.lcscore[var] += 2**(-len(clause))
+                self.lcscore[var] -= 2**(-(len(clause)+1))
+
+    def ready(self):
+        keys = self.cnf_instance.get_unassigned()
+        score_list = [(k, v) for k, v in self.lcscore.items() if k in keys]
+        score_list.sort( key = lambda tup : abs(tup[1]), reverse=False )
+
+        if abs(score_list[0][1]) > abs(self.threshold):
+            return False
+        else: 
+            return True
+
+    def generate_node(self, current_node):
+        keys = self.cnf_instance.get_unassigned()
+        
+        score_list = [(k, v) for k, v in self.lcscore.items() if k in keys]
+        score_list.sort( key = lambda tup : abs(tup[1]), reverse=False )
+        if score_list[0][1] > 0:
+            literal = score_list[0][0]
+        else:
+            literal = -score_list[0][0]
+
+        self.nodes += 1
+        return search_tree.SplitNode(literal, current_node)
 
 class MostConstrainingComponent(SearchComponent):
     lcscore = {}

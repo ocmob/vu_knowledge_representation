@@ -68,15 +68,58 @@ def dp(dimacs_file_set, search_cmp):
 
     return answer_dict
 
+# -8 : 8 , step: 0.1
+
 dimacs = []
-#dimacs.append( ('medium_sat', ['data/moderate_sat.txt'] ))
-#dimacs.append( ('damnhard_0', ['data/sudoku-rules.txt', 'data/damnhard_converted_{}.txt'.format(0)] ))
-#for i in range(1,10):
-    #dimacs.append( ('randsat_{}'.format(i), ['data/uf75-325/ai/hoos/Shortcuts/UF75.325.100/uf75-0{}.cnf'.format(i)] ))
-for i in range(10):
+for i in range(1,100):
+    dimacs.append( ('randsat_{}'.format(i), ['data/uf75-325/ai/hoos/Shortcuts/UF75.325.100/uf75-0{}.cnf'.format(i)] ))
+for i in range(100):
     dimacs.append( ('1000sudokus_{}'.format(i), ['data/sudoku-rules.txt', 'data/1000sudokus/1000sudokus_{}.txt'.format(i)] ))
-for i in range(10):
+for i in range(20):
     dimacs.append( ('damnhard_{}'.format(i), ['data/sudoku-rules.txt', 'data/damnhard_converted_{}.txt'.format(i)] ))
+
+#hyp_sweep = np.arange(-8, 8, 0.1)
+hyp_sweep = np.arange(0, 5, 0.05)
+gen_comp = []
+
+for hyp_threshold in hyp_sweep:
+    tup = ( hyp_threshold,
+            [
+                (search_components.UnitClauseComponent(), 'uc_nodes'), 
+                (search_components.PureLiteralComponent(), 'pl_nodes'),
+                (search_components.MostConstrainingMeta(hyp_threshold), 'most_constraining_nodes'),
+                (search_components.JWTwoSided(), 'jwnodes'),
+            ]
+    )
+    gen_comp.append(tup)
+
+#for hyp_threshold in hyp_sweep:
+#    tup = ( 'rand',
+#                [
+#                    (search_components.UnitClauseComponent(), 'uc_nodes'), 
+#                    (search_components.PureLiteralComponent(), 'pl_nodes'),
+#                    (search_components.MostConstrainingRandMeta(), 'most_constraining_nodes'),
+#                    (search_components.JWTwoSided(), 'jwnodes'),
+#                ]
+#        )
+#    gen_comp.append(tup)
+#
+#tup = ( 'JW',
+#            [
+#                (search_components.UnitClauseComponent(), 'uc_nodes'), 
+#                (search_components.PureLiteralComponent(), 'pl_nodes'),
+#                (search_components.JWTwoSided(), 'jwnodes'),
+#            ]
+#    )
+#gen_comp.append(tup)
+#tup = ( 'most_constraning',
+#            [
+#                (search_components.UnitClauseComponent(), 'uc_nodes'), 
+#                (search_components.PureLiteralComponent(), 'pl_nodes'),
+#                (search_components.MostConstrainingComponent(), 'most_constraining_nodes'),
+#            ]
+#    )
+#gen_comp.append(tup)
 
 experiment_run = {
     # ARRAY OF TUPLES:
@@ -92,22 +135,30 @@ experiment_run = {
     # [1] = ARRAY OF TUPLES:
     #   [0] = SEARCH COMPONENT
     #   [1] = RETURN METRIC NAME
-    'search_components' : [
-        ( 'jw_two_sided',
-            [
-                (search_components.UnitClauseComponent(), 'uc_nodes'), 
-                (search_components.PureLiteralComponent(), 'pl_nodes'),
-                (search_components.JWTwoSided(), 'split_nodes'),
-            ]
-        ),
-        ( 'most_constraining_dp',
-            [
-                (search_components.UnitClauseComponent(), 'uc_nodes'), 
-                (search_components.PureLiteralComponent(), 'pl_nodes'),
-                (search_components.MostConstrainingComponent(), 'split_nodes'),
-            ]
-        )
-    ]
+    'search_components' : gen_comp
+    #'search_components' : [
+    #    ( 'most_constraining_dp',
+    #        [
+    #            (search_components.UnitClauseComponent(), 'uc_nodes'), 
+    #            (search_components.PureLiteralComponent(), 'pl_nodes'),
+    #            (search_components.MostConstrainingMeta(), 'split_nodes'),
+    #        ]
+    #    ),
+    #    #( 'jw_two_sided',
+    #    #    [
+    #    #        (search_components.UnitClauseComponent(), 'uc_nodes'), 
+    #    #        (search_components.PureLiteralComponent(), 'pl_nodes'),
+    #    #        (search_components.JWTwoSided(), 'split_nodes'),
+    #    #    ]
+    #    #),
+    #    #( 'random',
+    #    #    [
+    #    #        (search_components.UnitClauseComponent(), 'uc_nodes'), 
+    #    #        (search_components.PureLiteralComponent(), 'pl_nodes'),
+    #    #        (search_components.RandomChoiceComponent(), 'split_nodes'),
+    #    #    ]
+    #    #)
+    #]
 }
 #experiment_run = {
 #    # ARRAY OF TUPLES:
@@ -147,6 +198,7 @@ def run_experiment(run_params):
 
     total_cases = len(run_params['search_components'])*run_params['iterations']*len(run_params['dimacs'])
     counter = 0
+    #lengths = []
 
     print("Starting experiment.")
     print("Total {} cases will be run.".format(total_cases))
@@ -182,17 +234,24 @@ def run_experiment(run_params):
                 for k, name in enumerate(scmp_cmp_names):
                     res_dict[name] = [results['cnf'].search_cmp[k].get_metrics()]
 
+                #lengths.append((results['cnf'].length_of_clause, dimacs_set_name+scmp_set_name))
+
                 df = pd.DataFrame(res_dict)
                 data = data.append(df, ignore_index = True)
 
     print()
     print('Done with {} cases. Results written to {}'.format(total_cases, 'DUMMY FILE'))
 
-    return data
+    return data 
+
 
 
 data = run_experiment(experiment_run)
 print(data)
+data.to_csv('output.csv')
+
+#for length_set in lengths:
+#    plt.plot(length_set[0], label = length_set[1])
 
 
 

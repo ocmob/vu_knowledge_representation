@@ -15,21 +15,20 @@ DEBUG = False
 # Data structure for keeping and organizing the current status of the problem
 class ClausalNormalForm:
 
-    current_cnf = {}
-    literal_counts = {}
-
-    op_stack = []
-
-    pure_literals = set()
-    unit_clauses = set()
-    unassigned_vars = set()
-
     def __init__(self, dimacs_files, search_cmp):
         self.search_cmp = search_cmp
 
 	# First pass: go over DIMACS and create list of clauses
 	# https://stackoverflow.com/questions/28890268/parse-dimacs-cnf-file-python
         temp_clause_list = [[]]
+
+        self.length_of_clause = []
+        self.unassigned_vars = set()
+
+        self.current_cnf = {}
+        self.literal_counts = {}
+
+        self.op_stack = []
 
         for dimacs_file in dimacs_files:
             h_sat_file = open(dimacs_file, 'r')
@@ -51,8 +50,8 @@ class ClausalNormalForm:
 
         temp_clause_list.pop()
 
-        for search_comp in self.search_cmp:
-            search_comp.link_cnf(self)
+        for search_cmp in self.search_cmp:
+            search_cmp.link_cnf(self)
 
         # Go over clauses and do parsing
         for clause_id, clause in enumerate(temp_clause_list):
@@ -135,6 +134,7 @@ class ClausalNormalForm:
     def assign(self, assignment):
 
         status = None
+        self.length_of_clause.append(len(list(self.current_cnf.items())))
 
         # Remember all operations for backtracking
         # Will keep tuples of the form:
