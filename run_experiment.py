@@ -1,72 +1,96 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
+import argparse
 
 # Internal
 import search_components
 import cnf
 from dp import dp
 
-# -8 : 8 , step: 0.1
+def check_range(arg):
+    try:
+        value = int(arg)
+    except ValueError as err:
+       raise argparse.ArgumentTypeError(str(err))
+
+    if value <= 0 or value > 5:
+        message = "Expected 0 < value <= 5, got value = {}".format(value)
+        raise argparse.ArgumentTypeError(message)
+
+    return value
+
+parser = argparse.ArgumentParser()
+group = parser.add_mutually_exclusive_group(required=True)
+group.add_argument('-rand', action='store_true',
+                    help='Run test set for random heuristic')
+group.add_argument('-least', action='store_true',
+                    help='Run test set for least constraining heuristic')
+group.add_argument('-most', action='store_true',
+                    help='Run test set for most constraining heuristic')
+group.add_argument('-jw', action='store_true',
+                    help='Run test for Jeroslaw-Wang heuristic')
+
+parser.add_argument("ranges", type=check_range,
+                    help='Regulate number of cases. Ranges*10 randsat will be run, ranges*40 1000_sudokus will be run, ranges*4 damnhard will be run.')
+
+args = parser.parse_args()
 
 dimacs = []
-for i in range(1,1):
+
+for i in range(1,10*args.ranges+1):
     dimacs.append( ('randsat_{}'.format(i), ['data/uf75-325/ai/hoos/Shortcuts/UF75.325.100/uf75-0{}.cnf'.format(i)] ))
-for i in range(1,2):
+for i in range(1,40*args.ranges+1):
     dimacs.append( ('1000sudokus_{}'.format(i), ['data/sudoku-rules.txt', 'data/1000sudokus/1000sudokus_{}.txt'.format(i)] ))
-for i in range(1,2):
+for i in range(1,4*args.ranges+1):
     dimacs.append( ('damnhard_{}'.format(i), ['data/sudoku-rules.txt', 'data/damnhard_converted_{}.txt'.format(i)] ))
 
-#hyp_sweep = np.arange(-8, 8, 0.1)
-hyp_sweep = np.arange(0, 5, 5)
 gen_comp = []
 
-#for hyp_threshold in hyp_sweep:
-#    tup = ( hyp_threshold,
-#            [
-#                (search_components.UnitClauseComponent(), 'uc_nodes'), 
-#                (search_components.PureLiteralComponent(), 'pl_nodes'),
-#                (search_components.MostConstrainingMeta(hyp_threshold), 'most_constraining_nodes'),
-#                (search_components.JWTwoSided(), 'jwnodes'),
-#            ]
-#    )
-#    gen_comp.append(tup)
-
-#for hyp_threshold in hyp_sweep:
-#    tup = ( 'rand',
-#                [
-#                    (search_components.UnitClauseComponent(), 'uc_nodes'), 
-#                    (search_components.PureLiteralComponent(), 'pl_nodes'),
-#                    (search_components.MostConstrainingRandMeta(), 'most_constraining_nodes'),
-#                    (search_components.JWTwoSided(), 'jwnodes'),
-#                ]
-#        )
-#    gen_comp.append(tup)
-#
-tup = ( 'most_constraning',
-            [
-                (search_components.UnitClauseComponent(), 'uc_nodes'), 
-                (search_components.PureLiteralComponent(), 'pl_nodes'),
-                (search_components.MostConstrainingComponent(), 'splits'),
-            ]
-    )
-gen_comp.append(tup)
-#tup = ( 'rand',
-#            [
-#                (search_components.UnitClauseComponent(), 'uc_nodes'), 
-#                (search_components.PureLiteralComponent(), 'pl_nodes'),
-#                (search_components.RandomChoiceComponent(), 'splits'),
-#            ]
-#    )
-#gen_comp.append(tup)
-tup = ( 'JW',
-            [
-                (search_components.UnitClauseComponent(), 'uc_nodes'), 
-                (search_components.PureLiteralComponent(), 'pl_nodes'),
-                (search_components.JWTwoSided(), 'splits'),
-            ]
-    )
-gen_comp.append(tup)
+if args.rand:
+    filename = 'rand_output.csv'
+    iterations = 10
+    tup = ( 'rand',
+                [
+                    (search_components.UnitClauseComponent(), 'uc_nodes'), 
+                    (search_components.PureLiteralComponent(), 'pl_nodes'),
+                    (search_components.RandomChoiceComponent(), 'splits'),
+                ]
+        )
+    gen_comp.append(tup)
+elif args.least:
+    filename = 'least_constraning_output.csv'
+    iterations = 1
+    tup = ( 'least_constraining',
+                [
+                    (search_components.UnitClauseComponent(), 'uc_nodes'), 
+                    (search_components.PureLiteralComponent(), 'pl_nodes'),
+                    (search_components.LeastConstrainingComponent(), 'splits'),
+                ]
+        )
+    gen_comp.append(tup)
+elif args.most:
+    filename = 'most_constraning_output.csv'
+    iterations = 1
+    tup = ( 'most_constraning',
+                [
+                    (search_components.UnitClauseComponent(), 'uc_nodes'), 
+                    (search_components.PureLiteralComponent(), 'pl_nodes'),
+                    (search_components.MostConstrainingComponent(), 'splits'),
+                ]
+        )
+    gen_comp.append(tup)
+elif args.jw:
+    filename = 'jw_output.csv'
+    iterations = 1
+    tup = ( 'JW',
+                [
+                    (search_components.UnitClauseComponent(), 'uc_nodes'), 
+                    (search_components.PureLiteralComponent(), 'pl_nodes'),
+                    (search_components.JWTwoSided(), 'splits'),
+                ]
+        )
+    gen_comp.append(tup)
 
 experiment_run = {
     # ARRAY OF TUPLES:
@@ -75,7 +99,7 @@ experiment_run = {
     'dimacs' : dimacs,
 
     # NUMBER OF ITERATIONS PER EACH DIMACS SET
-    'iterations' : 1,
+    'iterations' : iterations,
 
     # ARRAY OF TUPLES:
     # [0] = NAME OF THE SET
@@ -83,63 +107,9 @@ experiment_run = {
     #   [0] = SEARCH COMPONENT
     #   [1] = RETURN METRIC NAME
     'search_components' : gen_comp
-    #'search_components' : [
-    #    ( 'most_constraining_dp',
-    #        [
-    #            (search_components.UnitClauseComponent(), 'uc_nodes'), 
-    #            (search_components.PureLiteralComponent(), 'pl_nodes'),
-    #            (search_components.MostConstrainingMeta(), 'split_nodes'),
-    #        ]
-    #    ),
-    #    #( 'jw_two_sided',
-    #    #    [
-    #    #        (search_components.UnitClauseComponent(), 'uc_nodes'), 
-    #    #        (search_components.PureLiteralComponent(), 'pl_nodes'),
-    #    #        (search_components.JWTwoSided(), 'split_nodes'),
-    #    #    ]
-    #    #),
-    #    #( 'random',
-    #    #    [
-    #    #        (search_components.UnitClauseComponent(), 'uc_nodes'), 
-    #    #        (search_components.PureLiteralComponent(), 'pl_nodes'),
-    #    #        (search_components.RandomChoiceComponent(), 'split_nodes'),
-    #    #    ]
-    #    #)
-    #]
 }
-#experiment_run = {
-#    # ARRAY OF TUPLES:
-#    # [0] = NAME OF SET
-#    # [1] = ARRAY WITH PATHS OF DIMACS FILES 
-#    'dimacs' : dimacs,
-#
-#    # NUMBER OF ITERATIONS PER EACH DIMACS SET
-#    'iterations' : 1,
-#
-#    # ARRAY OF TUPLES:
-#    # [0] = NAME OF THE SET
-#    # [1] = ARRAY OF TUPLES:
-#    #   [0] = SEARCH COMPONENT
-#    #   [1] = RETURN METRIC NAME
-#    'search_components' : [
-#        ( 'random_choice_dp',
-#            [
-#                (search_components.UnitClauseComponent(), 'uc_nodes'), 
-#                (search_components.PureLiteralComponent(), 'pl_nodes'),
-#                (search_components.JWTwoSided(), 'split_nodes'),
-#            ]
-#        ),
-#        ( 'most_constraining_dp',
-#            [
-#                (search_components.UnitClauseComponent(), 'uc_nodes'), 
-#                (search_components.PureLiteralComponent(), 'pl_nodes'),
-#                (search_components.MostConstrainingComponent(), 'split_nodes'),
-#            ]
-#        )
-#    ]
-#}
 
-def run_experiment(run_params):
+def run_experiment(run_params, out_filename):
 
     data = pd.DataFrame()
 
@@ -161,7 +131,6 @@ def run_experiment(run_params):
 
             for i in range(run_params['iterations']):
                 counter += 1
-                print("", end='\r')
                 print("Running: scmp_set_name: {}, dimacs_set_name: {}, iteration: {}. Case {} of {} total.".format(
                     scmp_set_name, dimacs_set_name, i, counter, total_cases), end='\r')
 
@@ -186,13 +155,8 @@ def run_experiment(run_params):
                 df = pd.DataFrame(res_dict)
                 data = data.append(df, ignore_index = True)
 
-    print()
-    print('Done with {} cases. Results written to {}'.format(total_cases, 'DUMMY FILE'))
+    data.to_csv(out_filename)
+    print('')
+    print('Done with {} cases. Results written to {}'.format(total_cases, out_filename))
 
-    return data 
-
-
-
-data = run_experiment(experiment_run)
-print(data)
-data.to_csv('output.csv')
+run_experiment(experiment_run, filename)
