@@ -1,10 +1,5 @@
 DEBUG = False
 
-# BinaryTreeNode node type constants
-SPLIT = 1
-PURE_LITERAL = 2
-UNIT_CLAUSE = 3
-
 # Binary tree node for the Davis-Putnam search
 class BinaryTreeNode:
     def __init__(self, var, parent):
@@ -16,7 +11,6 @@ class SplitNode:
     def __init__(self, var, parent):
         self.var = var
         self.parent = parent
-        self.type = SPLIT
         self.true_explored = False
         self.false_explored = False
 
@@ -38,8 +32,6 @@ class SplitNode:
         if DEBUG:
             print()
             print('Evaluating: ', self.var)
-            #print('False: ', self.false_explored)
-            #print('True: ', self.true_explored)
 
         return self.var
 
@@ -47,7 +39,6 @@ class PureLiteralNode:
     def __init__(self, var, parent):
         self.var = var
         self.parent = parent
-        self.type = PURE_LITERAL
         self.explored = False
 
     def is_explored(self):
@@ -61,7 +52,6 @@ class UnitClauseNode:
     def __init__(self, var, parent):
         self.var = var
         self.parent = parent
-        self.type = UNIT_CLAUSE
         self.explored = False
 
     def is_explored(self):

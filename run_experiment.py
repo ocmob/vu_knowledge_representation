@@ -1,4 +1,3 @@
-import sys
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -6,92 +5,32 @@ import pandas as pd
 # Internal
 import search_components
 import cnf
-
-def dp(dimacs_file_set, search_cmp):
-
-    for scmp in search_cmp:
-        scmp.reset()
-
-    my_cnf = cnf.ClausalNormalForm(dimacs_file_set, search_cmp)
-
-    backtracks = 0
-    success = False
-
-    for search_cmp in my_cnf.search_cmp:
-        if search_cmp.ready():
-            current_node = search_cmp.generate_node(None)
-            break
-
-    while True:
-        # Startup
-        if current_node.is_explored():
-            if current_node.parent != None:
-                backtracks += 1
-                my_cnf.backtrack()
-                previous_node = current_node
-                current_node = previous_node.parent
-                del previous_node
-            else:
-                break
-        else:
-            result = my_cnf.assign(current_node.explore())
-
-            if result == cnf.SAT:
-                success = True
-                break
-            # If assignment yielded UNSAT - backtrack
-            elif result == cnf.UNSAT:
-                my_cnf.backtrack()
-            # Check and create unit clause nodes
-            else:
-                for search_cmp in my_cnf.search_cmp:
-                    if search_cmp.ready():
-                        current_node = search_cmp.generate_node(current_node)
-                        break
-
-    if success:
-        assignment = []
-        counter = 0
-
-        while current_node != None:
-            assignment.append(current_node.var)
-            if current_node.var > 0:
-                counter += 1
-            current_node = current_node.parent
-
-    answer_dict = {
-            'SAT' : success,
-            'solution' : assignment,
-            'backtracks' : backtracks,
-            'cnf' : my_cnf
-    }
-
-    return answer_dict
+from dp import dp
 
 # -8 : 8 , step: 0.1
 
 dimacs = []
-for i in range(1,100):
+for i in range(1,2):
     dimacs.append( ('randsat_{}'.format(i), ['data/uf75-325/ai/hoos/Shortcuts/UF75.325.100/uf75-0{}.cnf'.format(i)] ))
-for i in range(100):
+for i in range(1):
     dimacs.append( ('1000sudokus_{}'.format(i), ['data/sudoku-rules.txt', 'data/1000sudokus/1000sudokus_{}.txt'.format(i)] ))
-for i in range(20):
-    dimacs.append( ('damnhard_{}'.format(i), ['data/sudoku-rules.txt', 'data/damnhard_converted_{}.txt'.format(i)] ))
+#for i in range(1):
+#    dimacs.append( ('damnhard_{}'.format(i), ['data/sudoku-rules.txt', 'data/damnhard_converted_{}.txt'.format(i)] ))
 
 #hyp_sweep = np.arange(-8, 8, 0.1)
-hyp_sweep = np.arange(0, 5, 0.05)
+hyp_sweep = np.arange(0, 5, 5)
 gen_comp = []
 
-for hyp_threshold in hyp_sweep:
-    tup = ( hyp_threshold,
-            [
-                (search_components.UnitClauseComponent(), 'uc_nodes'), 
-                (search_components.PureLiteralComponent(), 'pl_nodes'),
-                (search_components.MostConstrainingMeta(hyp_threshold), 'most_constraining_nodes'),
-                (search_components.JWTwoSided(), 'jwnodes'),
-            ]
-    )
-    gen_comp.append(tup)
+#for hyp_threshold in hyp_sweep:
+#    tup = ( hyp_threshold,
+#            [
+#                (search_components.UnitClauseComponent(), 'uc_nodes'), 
+#                (search_components.PureLiteralComponent(), 'pl_nodes'),
+#                (search_components.MostConstrainingMeta(hyp_threshold), 'most_constraining_nodes'),
+#                (search_components.JWTwoSided(), 'jwnodes'),
+#            ]
+#    )
+#    gen_comp.append(tup)
 
 #for hyp_threshold in hyp_sweep:
 #    tup = ( 'rand',
@@ -104,22 +43,30 @@ for hyp_threshold in hyp_sweep:
 #        )
 #    gen_comp.append(tup)
 #
-#tup = ( 'JW',
-#            [
-#                (search_components.UnitClauseComponent(), 'uc_nodes'), 
-#                (search_components.PureLiteralComponent(), 'pl_nodes'),
-#                (search_components.JWTwoSided(), 'jwnodes'),
-#            ]
-#    )
-#gen_comp.append(tup)
-#tup = ( 'most_constraning',
-#            [
-#                (search_components.UnitClauseComponent(), 'uc_nodes'), 
-#                (search_components.PureLiteralComponent(), 'pl_nodes'),
-#                (search_components.MostConstrainingComponent(), 'most_constraining_nodes'),
-#            ]
-#    )
-#gen_comp.append(tup)
+tup = ( 'rand',
+            [
+                (search_components.UnitClauseComponent(), 'uc_nodes'), 
+                (search_components.PureLiteralComponent(), 'pl_nodes'),
+                (search_components.RandomChoiceComponent(), 'splits'),
+            ]
+    )
+gen_comp.append(tup)
+tup = ( 'JW',
+            [
+                (search_components.UnitClauseComponent(), 'uc_nodes'), 
+                (search_components.PureLiteralComponent(), 'pl_nodes'),
+                (search_components.JWTwoSided(), 'splits'),
+            ]
+    )
+gen_comp.append(tup)
+tup = ( 'most_constraning',
+            [
+                (search_components.UnitClauseComponent(), 'uc_nodes'), 
+                (search_components.PureLiteralComponent(), 'pl_nodes'),
+                (search_components.MostConstrainingComponent(), 'splits'),
+            ]
+    )
+gen_comp.append(tup)
 
 experiment_run = {
     # ARRAY OF TUPLES:
@@ -249,35 +196,3 @@ def run_experiment(run_params):
 data = run_experiment(experiment_run)
 print(data)
 data.to_csv('output.csv')
-
-#for length_set in lengths:
-#    plt.plot(length_set[0], label = length_set[1])
-
-
-
-# Inputs:
-#   -A list of dimacs file sets
-#       -A codename of each set
-#   -no of iterations per dimacs
-#   -component sets
-#       -codename per component set
-#       -and names of fields displaying metrics data from each components
-# Outputs:
-#   -SAT/UNSAT
-#   -Valid/invalid
-#   -Codename of DIMACS set
-#   -Iteration number
-#   -Codename of component set
-#   -fields displaying metrics data
-# Todo:
-#   -Run checker after every run
-
-
-
-
-
-
-# TODO IDEA: CHANGE HOW CLAUSES ARE STORED?
-#   Linked list type data structure - clause is an object, has parents (all variables participating)
-
-

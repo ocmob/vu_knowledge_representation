@@ -1,16 +1,14 @@
 import re
 import random
-
-# ClausalNormalForm assign method constants
-UNSAT = 0
-SAT = 1
-
-# ClausalNormalForm backtrack action type constants
-RM_CLAUSE = 0
-RM_LITERAL = 1
-ASSIGN = 2
+from enum import Enum
 
 DEBUG = False
+
+# ClausalNormalForm action type enum
+class Action(Enum):
+    RM_CLAUSE = 0
+    RM_LITERAL = 1
+    ASSIGN = 2
 
 # Data structure for keeping and organizing the current status of the problem
 class ClausalNormalForm:
@@ -18,16 +16,12 @@ class ClausalNormalForm:
     def __init__(self, dimacs_files, search_cmp):
         self.search_cmp = search_cmp
 
-	# First pass: go over DIMACS and create list of clauses
+        # First pass: go over DIMACS and create list of clauses. Using modified code from:
 	# https://stackoverflow.com/questions/28890268/parse-dimacs-cnf-file-python
         temp_clause_list = [[]]
 
-        self.length_of_clause = []
         self.unassigned_vars = set()
-
         self.current_cnf = {}
-        self.literal_counts = {}
-
         self.op_stack = []
 
         for dimacs_file in dimacs_files:
@@ -75,8 +69,79 @@ class ClausalNormalForm:
 
         h_sat_file.close()
 
+
     def get_unassigned(self):
         return self.unassigned_vars
+
+
+    def assign(self, assignment):
+
+        status = None
+
+        # Remember all operations for backtracking
+        # Will keep tuples of the form:
+        # [0] : Op code (ASSIGN, RM_CLAUSE, RM_LITERAL)
+        # [1] : Clause ID (if applicable, else: None)
+        # [2] : Operand
+        ops_single_step = []
+
+        var = abs(assignment)
+
+        if var not in self.unassigned_vars:
+            print("FATAL ERROR: Tried to assign variable: {} which is not on the unassigned list. Exiting...".format(var))
+            sys.exit()
+
+        # Remember that we took this var from unassigned list
+        ops_single_step.append( (Action.ASSIGN, None, var) )
+        self.unassigned_vars.remove(var)
+
+        if DEBUG:
+            print("Assign step. Assignment: {}".format(assignment))
+
+        # Go through the clauses and perform assignment
+        for clause_id, clause in list(self.current_cnf.items()):
+            if DEBUG:
+                print("Clause id: {}, clause: {}".format(clause_id, clause))
+
+            if assignment in clause:
+                if DEBUG:
+                    print("Assignment found. Removing clause")
+
+                # Remember that we removed this clause
+                ops_single_step.append( (Action.RM_CLAUSE, clause_id, clause) )
+
+                for search_comp in self.search_cmp:
+                    search_comp.rm_clause(clause, clause_id)
+
+                del self.current_cnf[clause_id]
+
+            elif -assignment in clause:
+                if DEBUG:
+                    print("NOT Assignment found. Removing literal")
+
+                # Remember that we removed this literal
+                ops_single_step.append( (Action.RM_LITERAL, clause_id, -assignment) )
+
+                for search_comp in self.search_cmp:
+                    search_comp.rm_literal(-assignment, clause_id)
+
+                self.current_cnf[clause_id].remove(-assignment)
+
+                # If empty set detected: UNSAT. Exit loop and report back
+                if not bool(self.current_cnf[clause_id]):
+                    status = False
+                    if DEBUG: 
+                        print("UNSAT FOUND")
+                    break
+
+        # If the cnf is empty: report SAT!
+        if not self.current_cnf:
+            status = True
+        else:
+            self.op_stack.append(ops_single_step)
+
+        return status
+
 
     def backtrack(self, no_steps=1):
 
@@ -97,10 +162,8 @@ class ClausalNormalForm:
                 clause_id = op[1]
                 operand = op[2]
 
-                #breakpoint()
-
                 # Restore deleted clauses
-                if action == RM_CLAUSE:
+                if action == Action.RM_CLAUSE:
                     if DEBUG:
                         print("undoing RM_CLAUSE:")
                         print("clause_id: {}, operand: {}".format(clause_id, operand))
@@ -111,115 +174,27 @@ class ClausalNormalForm:
                     self.current_cnf[clause_id] = operand
 
                 # Restore deleted literals
-                elif action == RM_LITERAL:
+                elif action == Action.RM_LITERAL:
                     if DEBUG:
                         print("undoing RM_LITERAL:")
                         print("clause_id: {}, operand: {}".format(clause_id, operand))
                         print("clause: {}".format(self.get_clause(clause_id)))
 
-                    # If it was a unit clause it will stop being one when we restore the literal
                     for search_comp in self.search_cmp:
                         search_comp.undo_rm_literal(operand, clause_id)
 
                     self.current_cnf[clause_id].add(operand)
 
                 # Restore variables to unassigned_vars 
-                elif action == ASSIGN:
+                elif action == Action.ASSIGN:
                     if DEBUG:
                         print("undoing ASSIGN:")
                         print("operand: {}".format(operand))
 
                     self.unassigned_vars.add(operand)
 
-    def assign(self, assignment):
-
-        status = None
-        self.length_of_clause.append(len(list(self.current_cnf.items())))
-
-        # Remember all operations for backtracking
-        # Will keep tuples of the form:
-        # [0] : Op code (ASSIGN, RM_CLAUSE, RM_LITERAL)
-        # [1] : Clause ID (if applicable, else: None)
-        # [2] : Operand
-        ops_single_step = []
-
-        var = abs(assignment)
-
-        if var not in self.unassigned_vars:
-            print("FATAL ERROR: Tried to assign variable: {} which is not on the unassigned list. Exiting...".format(var))
-            sys.exit()
-
-        # Remember that we took this var from unassigned list
-        ops_single_step.append( (ASSIGN, None, var) )
-        self.unassigned_vars.remove(var)
-
-        if DEBUG:
-            print("Assign step. Assignment: {}".format(assignment))
-
-        # Go through the clauses and perform assignment
-        for clause_id, clause in list(self.current_cnf.items()):
-            if DEBUG:
-                print("Clause id: {}, clause: {}".format(clause_id, clause))
-
-            if assignment in clause:
-                if DEBUG:
-                    print("Assignment found. Removing clause")
-
-                # Remember that we removed this clause
-                ops_single_step.append( (RM_CLAUSE, clause_id, clause) )
-
-                for search_comp in self.search_cmp:
-                    search_comp.rm_clause(clause, clause_id)
-
-                del self.current_cnf[clause_id]
-
-            elif -assignment in clause:
-                if DEBUG:
-                    print("NOT Assignment found. Removing literal")
-
-                # Remember that we removed this literal
-                ops_single_step.append( (RM_LITERAL, clause_id, -assignment) )
-
-                for search_comp in self.search_cmp:
-                    search_comp.rm_literal(-assignment, clause_id)
-
-                self.current_cnf[clause_id].remove(-assignment)
-
-                # If empty set detected: UNSAT. Exit loop and report back
-                if not bool(self.current_cnf[clause_id]):
-                    status = UNSAT
-                    if DEBUG: 
-                        print("UNSAT FOUND")
-                    break
-
-        # If the cnf is empty: report SAT!
-        if not bool(self.current_cnf):
-            status = SAT
-        else:
-            self.op_stack.append(ops_single_step)
-
-        return status
-
     def get_clause(self, clause_id):
         return self.current_cnf[clause_id]
-
-    def print_op_stack(self):
-        print(self.op_stack)
-
-    def print_current_cnf(self):
-        print(self.current_cnf)
-
-    def print_vars(self):
-        print(self.unassigned_vars)
-
-    def print_debug(self):
-        print("-------------------------------------------")
-        print("OP STACK:")
-        self.print_op_stack()
-        print("CURRENT CNF:")
-        self.print_current_cnf()
-        print("VARS:")
-        self.print_vars()
 
     def get_random_var(self):
         variables = self.get_unassigned()
