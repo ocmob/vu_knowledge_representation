@@ -46,8 +46,8 @@ def dp(dimacs_file_set, search_cmp):
                         break
 
     # Backtrack through all nodes to get the assignment
+    assignment = []
     if success:
-        assignment = []
         while current_node != None:
             assignment.append(current_node.var)
             current_node = current_node.parent

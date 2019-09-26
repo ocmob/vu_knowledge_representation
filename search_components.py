@@ -109,11 +109,11 @@ class JWTwoSided(SearchComponent):
         keys = self.cnf_instance.get_unassigned()
         
         score_list = [(k, v) for k, v in self.jwscore.items() if k in keys]
-        score_list.sort( key = lambda tup : tup[1], reverse=True )
-        if self.jwscore_sided[score_list[0][0]] > self.jwscore_sided[-score_list[0][0]]:
-            literal = score_list[0][0]
+        var, value = max(score_list, key = lambda tup : tup[1])
+        if self.jwscore_sided[var] > self.jwscore_sided[-var]:
+            literal = var
         else:
-            literal = -score_list[0][0]
+            literal = -var
 
         self.nodes += 1
         return search_tree.SplitNode(literal, current_node)
@@ -197,27 +197,6 @@ class XConstrainingFamily(SearchComponent):
         raise NotImplementedError('Pure virtual generate_node method is undefined!')
 
 
-class MostConstrainingRandMeta(XConstrainingFamily):
-    def ready(self):
-        if random.random() > 0.5:
-            return False
-        else: 
-            return True
-
-    def generate_node(self, current_node):
-        keys = self.cnf_instance.get_unassigned()
-        
-        score_list = [(k, v) for k, v in self.lcscore.items() if k in keys]
-        score_list.sort( key = lambda tup : abs(tup[1]), reverse=False )
-        if score_list[0][1] > 0:
-            literal = score_list[0][0]
-        else:
-            literal = -score_list[0][0]
-
-        self.nodes += 1
-        return search_tree.SplitNode(literal, current_node)
-
-
 class LeastConstrainingComponent(XConstrainingFamily):
     def ready(self):
         return True
@@ -226,11 +205,11 @@ class LeastConstrainingComponent(XConstrainingFamily):
         keys = self.cnf_instance.get_unassigned()
         
         score_list = [(k, v) for k, v in self.lcscore.items() if k in keys]
-        score_list.sort( key = lambda tup : abs(tup[1]), reverse=True )
-        if score_list[0][1] > 0:
-            literal = score_list[0][0]
+        var, value = max(score_list, key = lambda tup : abs(tup[1]))
+        if value > 0:
+            literal = var
         else:
-            literal = -score_list[0][0]
+            literal = -var
 
         self.nodes += 1
         return search_tree.SplitNode(literal, current_node)
@@ -247,11 +226,11 @@ class MostConstrainingRandMeta(XConstrainingFamily):
         keys = self.cnf_instance.get_unassigned()
         
         score_list = [(k, v) for k, v in self.lcscore.items() if k in keys]
-        score_list.sort( key = lambda tup : abs(tup[1]), reverse=False )
-        if score_list[0][1] > 0:
-            literal = score_list[0][0]
+        var, value = min(score_list, key = lambda tup : abs(tup[1]))
+        if value > 0:
+            literal = var
         else:
-            literal = -score_list[0][0]
+            literal = -var
 
         self.nodes += 1
         return search_tree.SplitNode(literal, current_node)
@@ -264,9 +243,9 @@ class MostConstrainingMeta(XConstrainingFamily):
     def ready(self):
         keys = self.cnf_instance.get_unassigned()
         score_list = [(k, v) for k, v in self.lcscore.items() if k in keys]
-        score_list.sort( key = lambda tup : abs(tup[1]), reverse=False )
+        var, value = min(score_list, key = lambda tup : abs(tup[1]))
 
-        if abs(score_list[0][1]) > abs(self.threshold):
+        if abs(value) > abs(self.threshold):
             return False
         else: 
             return True
@@ -275,11 +254,11 @@ class MostConstrainingMeta(XConstrainingFamily):
         keys = self.cnf_instance.get_unassigned()
         
         score_list = [(k, v) for k, v in self.lcscore.items() if k in keys]
-        score_list.sort( key = lambda tup : abs(tup[1]), reverse=False )
-        if score_list[0][1] > 0:
-            literal = score_list[0][0]
+        var, value = min(score_list, key = lambda tup : abs(tup[1]))
+        if value > 0:
+            literal = var
         else:
-            literal = -score_list[0][0]
+            literal = -var
 
         self.nodes += 1
         return search_tree.SplitNode(literal, current_node)
@@ -293,11 +272,11 @@ class MostConstrainingComponent(XConstrainingFamily):
         keys = self.cnf_instance.get_unassigned()
         
         score_list = [(k, v) for k, v in self.lcscore.items() if k in keys]
-        score_list.sort( key = lambda tup : abs(tup[1]), reverse=False )
-        if score_list[0][1] > 0:
-            literal = score_list[0][0]
+        var, value = min(score_list, key = lambda tup : abs(tup[1]))
+        if value > 0:
+            literal = var
         else:
-            literal = -score_list[0][0]
+            literal = -var
 
         self.nodes += 1
         return search_tree.SplitNode(literal, current_node)
@@ -374,45 +353,64 @@ class RandomChoiceComponent(SearchComponent):
 
 class UnitClauseComponent(SearchComponent):
 
-    unit_clauses = set()
-
     def reset(self):
-        self.unit_clauses = set()
+        self.no_clauses = 0
+        self.unit_clauses = {}
         super().reset()
 
     def link_cnf(self, cnf_instance):
+        for var in list(cnf_instance.get_unassigned()):
+            self.unit_clauses[var] = set()
+            self.unit_clauses[-var] = set()
+
         super().link_cnf(cnf_instance)
 
     def init_with_clause(self, clause, clause_id):
         if len(clause) == 1:
-            self.unit_clauses.add(clause_id)
+            self.no_clauses += 1
+            self.unit_clauses[ next(iter(clause)) ].add(clause_id)
 
     def rm_clause(self, operand, clause_id):
         if len(operand) == 1:
-            self.unit_clauses.remove(clause_id)
+            self.no_clauses -= 1
+            self.unit_clauses[ next(iter(operand)) ].remove(clause_id)
 
     def rm_literal(self, operand, clause_id):
-        if len(self.cnf_instance.get_clause(clause_id)) == 2:
-            self.unit_clauses.add(clause_id)
+        clause = self.cnf_instance.get_clause(clause_id) 
+
+        if len(clause) == 2:
+            clause_no_op = clause.copy()
+            clause_no_op.remove(operand)
+            self.no_clauses += 1
+            self.unit_clauses[ next(iter(clause_no_op)) ].add(clause_id)
+        elif len(clause) == 1:
+            self.no_clauses -= 1
+            self.unit_clauses[ operand ].remove(clause_id)
 
     def undo_rm_literal(self, operand, clause_id):
-        if len(self.cnf_instance.get_clause(clause_id)) == 1:
-            self.unit_clauses.remove(clause_id)
-        elif len(self.cnf_instance.get_clause(clause_id)) == 0:
-            self.unit_clauses.add(clause_id)
+        clause = self.cnf_instance.get_clause(clause_id)
+
+        if len(clause) == 1:
+            self.no_clauses -= 1
+            self.unit_clauses[ next(iter(clause)) ].remove(clause_id)
+        elif len(clause) == 0:
+            self.no_clauses += 1
+            self.unit_clauses[ operand ].add(clause_id)
 
     def undo_rm_clause(self, operand, clause_id):
         if len(operand) == 1:
-            self.unit_clauses.add(clause_id)
+            self.no_clauses += 1
+            self.unit_clauses[ next(iter(operand)) ].add(clause_id)
+
 
     def get_unit_clause_literal(self):
-        clause_id = random.sample(self.unit_clauses, 1)[0]
-        clause = self.cnf_instance.get_clause(clause_id)
-        literal = random.sample(clause, 1)[0]
+        self.literal_counts = list(self.unit_clauses.items())
+        literal = max(self.literal_counts, key = lambda tup : len(tup[1]))[0]
         return literal
 
+
     def ready(self):
-        if not self.unit_clauses:
+        if self.no_clauses == 0:
             return False
         else:
             return True
@@ -424,7 +422,6 @@ class UnitClauseComponent(SearchComponent):
 
 
 class PureLiteralComponent(SearchComponent):
-    literal_counts = {}
     pure_literals = set()
 
     def reset(self):

@@ -1,18 +1,22 @@
 DEBUG = False
 
-# Binary tree node for the Davis-Putnam search
-class BinaryTreeNode:
+class SearchTreeNode:
     def __init__(self, var, parent):
         self.var = var
         self.parent = parent
 
+    def is_explored(self):
+        raise NotImplementedError('Pure virtual is_explored method is undefined!')
 
-class SplitNode:
+    def explore(self):
+        raise NotImplementedError('Pure virtual explore method is undefined!')
+
+
+class SplitNode(SearchTreeNode):
     def __init__(self, var, parent):
-        self.var = var
-        self.parent = parent
         self.true_explored = False
         self.false_explored = False
+        super().__init__(var, parent)
 
     def is_explored(self):
         return (self.true_explored & self.false_explored)
@@ -35,11 +39,10 @@ class SplitNode:
 
         return self.var
 
-class PureLiteralNode:
+class PureLiteralNode(SearchTreeNode):
     def __init__(self, var, parent):
-        self.var = var
-        self.parent = parent
         self.explored = False
+        super().__init__(var, parent)
 
     def is_explored(self):
         return self.explored
@@ -48,11 +51,10 @@ class PureLiteralNode:
         self.explored = True
         return self.var
 
-class UnitClauseNode:
+class UnitClauseNode(SearchTreeNode):
     def __init__(self, var, parent):
-        self.var = var
-        self.parent = parent
         self.explored = False
+        super().__init__(var, parent)
 
     def is_explored(self):
         return self.explored

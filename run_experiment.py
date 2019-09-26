@@ -10,12 +10,12 @@ from dp import dp
 # -8 : 8 , step: 0.1
 
 dimacs = []
-for i in range(1,2):
+for i in range(1,1):
     dimacs.append( ('randsat_{}'.format(i), ['data/uf75-325/ai/hoos/Shortcuts/UF75.325.100/uf75-0{}.cnf'.format(i)] ))
-for i in range(1):
+for i in range(1,2):
     dimacs.append( ('1000sudokus_{}'.format(i), ['data/sudoku-rules.txt', 'data/1000sudokus/1000sudokus_{}.txt'.format(i)] ))
-#for i in range(1):
-#    dimacs.append( ('damnhard_{}'.format(i), ['data/sudoku-rules.txt', 'data/damnhard_converted_{}.txt'.format(i)] ))
+for i in range(1,2):
+    dimacs.append( ('damnhard_{}'.format(i), ['data/sudoku-rules.txt', 'data/damnhard_converted_{}.txt'.format(i)] ))
 
 #hyp_sweep = np.arange(-8, 8, 0.1)
 hyp_sweep = np.arange(0, 5, 5)
@@ -43,27 +43,27 @@ gen_comp = []
 #        )
 #    gen_comp.append(tup)
 #
-tup = ( 'rand',
-            [
-                (search_components.UnitClauseComponent(), 'uc_nodes'), 
-                (search_components.PureLiteralComponent(), 'pl_nodes'),
-                (search_components.RandomChoiceComponent(), 'splits'),
-            ]
-    )
-gen_comp.append(tup)
-tup = ( 'JW',
-            [
-                (search_components.UnitClauseComponent(), 'uc_nodes'), 
-                (search_components.PureLiteralComponent(), 'pl_nodes'),
-                (search_components.JWTwoSided(), 'splits'),
-            ]
-    )
-gen_comp.append(tup)
 tup = ( 'most_constraning',
             [
                 (search_components.UnitClauseComponent(), 'uc_nodes'), 
                 (search_components.PureLiteralComponent(), 'pl_nodes'),
                 (search_components.MostConstrainingComponent(), 'splits'),
+            ]
+    )
+gen_comp.append(tup)
+#tup = ( 'rand',
+#            [
+#                (search_components.UnitClauseComponent(), 'uc_nodes'), 
+#                (search_components.PureLiteralComponent(), 'pl_nodes'),
+#                (search_components.RandomChoiceComponent(), 'splits'),
+#            ]
+#    )
+#gen_comp.append(tup)
+tup = ( 'JW',
+            [
+                (search_components.UnitClauseComponent(), 'uc_nodes'), 
+                (search_components.PureLiteralComponent(), 'pl_nodes'),
+                (search_components.JWTwoSided(), 'splits'),
             ]
     )
 gen_comp.append(tup)

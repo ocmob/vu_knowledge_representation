@@ -1,4 +1,5 @@
 import re
+import sys
 import random
 from enum import Enum
 
@@ -19,6 +20,8 @@ class ClausalNormalForm:
         # First pass: go over DIMACS and create list of clauses. Using modified code from:
 	# https://stackoverflow.com/questions/28890268/parse-dimacs-cnf-file-python
         temp_clause_list = [[]]
+
+        self.global_step_no = 0
 
         self.unassigned_vars = set()
         self.current_cnf = {}
@@ -75,6 +78,8 @@ class ClausalNormalForm:
 
 
     def assign(self, assignment):
+
+        self.global_step_no += 1
 
         status = None
 
@@ -144,6 +149,8 @@ class ClausalNormalForm:
 
 
     def backtrack(self, no_steps=1):
+
+        self.global_step_no += 1
 
         if no_steps > len(self.op_stack):
             print("FATAL ERROR: Tried to backtrack more steps than possible. No_steps: {}. Size of stack: {}. Exiting...".format(no_steps, self.op_stack))

@@ -52,9 +52,12 @@ print('Done. {:.3f}s elapsed. {} backtracks, {} splits.'.format(
 
 output_file = args.input_file + '.out'
 
-print('Writing output to ', output_file)
+if answer['SAT']:
+    print('Result is: SAT. Writing output to', output_file)
 
-h_output_file = open(output_file, 'w')
-for var in answer['solution']:
-    h_output_file.write(str(var) + ' 0\n')
-h_output_file.close()
+    h_output_file = open(output_file, 'w')
+    for var in answer['solution']:
+        h_output_file.write(str(var) + ' 0\n')
+    h_output_file.close()
+else:
+    print('Result is: UNSAT. No output will be written.')
